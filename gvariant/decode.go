@@ -255,7 +255,7 @@ func (d *decodeState) decodeStruct() error {
 		if !isFixedWidth(rv.Elem()) {
 			if i == fieldCount-1 {
 				//last field
-				endPosition = len(d.data) - (d.frameOffsetSize * (frameBoundsConsumed + 1))
+				endPosition = len(d.data) - (d.frameOffsetSize * (frameBoundsConsumed))
 				err := newDecodeState(d.data[offset:endPosition], rv).decode()
 				if err != nil {
 					return err
