@@ -57,17 +57,18 @@ type Variant struct {
 }
 
 func frameOffsetSizeForContainerSize(size int) int {
+	if size == 0 {
+		return 0
+	}
+
 	size_f := float64(size)
-	i := 0
+	i := 1
 	for {
 		if size_f <= math.Pow(2, float64(8*i)) {
 			return i
 		}
 
 		i *= 2
-		if i == 0 {
-			i += 1
-		}
 	}
 }
 

@@ -30,7 +30,18 @@ func Unmarshal(data []byte, v any) error {
 		return &InvalidUnmarshalError{rv.Type()}
 	}
 
-	state := newDecodeState(data, rv)
+	state := newDecodeState(data, rv, false)
+
+	return state.decode()
+}
+
+func UnmarshalBigEndian(data []byte, v any) error {
+	rv := reflect.ValueOf(v)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return &InvalidUnmarshalError{rv.Type()}
+	}
+
+	state := newDecodeState(data, rv, true)
 
 	return state.decode()
 }
@@ -39,13 +50,15 @@ type decodeState struct {
 	data            []byte
 	receiver        reflect.Value
 	frameOffsetSize int
+	bigEndian       bool
 }
 
-func newDecodeState(data []byte, rv reflect.Value) *decodeState {
+func newDecodeState(data []byte, rv reflect.Value, bigEndian bool) *decodeState {
 	ret := decodeState{
 		data:            data,
 		receiver:        rv,
 		frameOffsetSize: frameOffsetSizeForContainerSize(len(data)),
+		bigEndian:       bigEndian,
 	}
 
 	return &ret
@@ -97,7 +110,13 @@ func (d *decodeState) decodeByte() error {
 }
 
 func (d *decodeState) decodeInt16() error {
-	val := binary.LittleEndian.Uint16(d.data)
+	var val uint16
+	if d.bigEndian {
+		val = binary.BigEndian.Uint16(d.data)
+	}
+	if !d.bigEndian {
+		val = binary.LittleEndian.Uint16(d.data)
+	}
 
 	switch d.receiver.Elem().Kind() {
 	case reflect.Int16:
@@ -111,7 +130,13 @@ func (d *decodeState) decodeInt16() error {
 }
 
 func (d *decodeState) decodeInt32() error {
-	val := binary.LittleEndian.Uint32(d.data)
+	var val uint32
+	if d.bigEndian {
+		val = binary.BigEndian.Uint32(d.data)
+	}
+	if !d.bigEndian {
+		val = binary.LittleEndian.Uint32(d.data)
+	}
 
 	switch d.receiver.Elem().Kind() {
 	case reflect.Int32:
@@ -125,7 +150,13 @@ func (d *decodeState) decodeInt32() error {
 }
 
 func (d *decodeState) decodeInt64() error {
-	val := binary.LittleEndian.Uint64(d.data)
+	var val uint64
+	if d.bigEndian {
+		val = binary.BigEndian.Uint64(d.data)
+	}
+	if !d.bigEndian {
+		val = binary.LittleEndian.Uint64(d.data)
+	}
 
 	switch d.receiver.Elem().Kind() {
 	case reflect.Int64:
@@ -139,7 +170,13 @@ func (d *decodeState) decodeInt64() error {
 }
 
 func (d *decodeState) decodeFloat() error {
-	val := binary.LittleEndian.Uint64(d.data)
+	var val uint64
+	if d.bigEndian {
+		val = binary.BigEndian.Uint64(d.data)
+	}
+	if !d.bigEndian {
+		val = binary.LittleEndian.Uint64(d.data)
+	}
 
 	d.receiver.Elem().SetFloat(math.Float64frombits(val))
 	return nil
@@ -175,7 +212,7 @@ func (d *decodeState) decodeArray() error {
 			nextStart := currentStart + width
 			rv := reflect.New(innerVal.Type())
 
-			err := newDecodeState(d.data[currentStart:nextStart], rv).decode()
+			err := newDecodeState(d.data[currentStart:nextStart], rv, d.bigEndian).decode()
 			if err != nil {
 				return err
 			}
@@ -198,7 +235,7 @@ func (d *decodeState) decodeArray() error {
 		frameData := d.data[offset:endPosition]
 
 		rv := reflect.New(val.Type().Elem())
-		err := newDecodeState(frameData, rv).decode()
+		err := newDecodeState(frameData, rv, d.bigEndian).decode()
 		if err != nil {
 			return err
 		}
@@ -246,7 +283,7 @@ func (d *decodeState) decodeStruct() error {
 		if isFixedWidth(rv.Elem()) {
 			// consume the bytes
 			endPosition = offset + typeWidth(rv.Elem())
-			err := newDecodeState(d.data[offset:endPosition], rv).decode()
+			err := newDecodeState(d.data[offset:endPosition], rv, d.bigEndian).decode()
 			if err != nil {
 				return err
 			}
@@ -256,7 +293,7 @@ func (d *decodeState) decodeStruct() error {
 			if i == fieldCount-1 {
 				//last field
 				endPosition = len(d.data) - (d.frameOffsetSize * (frameBoundsConsumed))
-				err := newDecodeState(d.data[offset:endPosition], rv).decode()
+				err := newDecodeState(d.data[offset:endPosition], rv, d.bigEndian).decode()
 				if err != nil {
 					return err
 				}
@@ -266,7 +303,7 @@ func (d *decodeState) decodeStruct() error {
 				boundBytes = boundBytes[0:d.frameOffsetSize]
 
 				endPosition = int(bytesToInt(boundBytes))
-				err := newDecodeState(d.data[offset:endPosition], rv).decode()
+				err := newDecodeState(d.data[offset:endPosition], rv, d.bigEndian).decode()
 				if err != nil {
 					return err
 				}
@@ -311,11 +348,11 @@ func (d *decodeState) decodeMap() error {
 		valBytes = d.data[nextAlignment(int(keyBound), alignment) : len(d.data)-d.frameOffsetSize]
 	}
 
-	err := newDecodeState(keyBytes, keyValue).decode()
+	err := newDecodeState(keyBytes, keyValue, d.bigEndian).decode()
 	if err != nil {
 		return err
 	}
-	err = newDecodeState(valBytes, valValue).decode()
+	err = newDecodeState(valBytes, valValue, d.bigEndian).decode()
 	if err != nil {
 		return err
 	}

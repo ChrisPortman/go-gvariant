@@ -300,7 +300,73 @@ func TestOSTreeCommit(t *testing.T) {
 
 	mayPanic := func() {
 		result := commit{}
-		err = Unmarshal(data, &result)
+		err = UnmarshalBigEndian(data, &result)
+		assert.Nil(t, err, "Unmarshal error")
+	}
+
+	assert.NotPanics(t, mayPanic)
+}
+
+// TestOSTreeDirMeta tests that a serialised OSTree dirmeta file contents
+// deserialises.
+// The meta type format is `(a{sv}aya(say)sstayay)`
+//
+// u - uid (big-endian)
+// u - gid (big-endian)
+// u - mode (big-endian)
+// a(ayay) - xattrs
+func TestOSTreeDirMeta(t *testing.T) {
+	data, err := os.ReadFile("testdata/dirmeta.dat")
+	if err != nil {
+		t.Fatalf("could not read test commit data: %s", err)
+	}
+
+	type dirmeta struct {
+		UID    uint32
+		GID    uint32
+		Mode   uint32
+		XAttrs []struct {
+			Bytes1 []uint8
+			Bytes2 []uint8
+		}
+	}
+
+	mayPanic := func() {
+		result := dirmeta{}
+		err = UnmarshalBigEndian(data, &result)
+		assert.Nil(t, err, "Unmarshal error")
+	}
+
+	assert.NotPanics(t, mayPanic)
+}
+
+// TestOSTreeDirTree tests that a serialised OSTree dirmeta file contents
+// deserialises.
+// The tree type form * - a(say) - array of (filename, checksum) for files
+//
+// - a(say) - array of (filename, checksum) for files
+// - a(sayay) - array of (dirname, tree_checksum, meta_checksum) for directories
+func TestOSTreeDirTree(t *testing.T) {
+	data, err:= os.ReadFile("testdata/dirtree.dat")
+	if err != nil {
+		t.Fatalf("could not read test commit data: %s", err)
+	}
+
+	type dirtree struct {
+		Files []struct {
+			Filename string
+			Checksum []uint8
+		}
+		Directories []struct {
+			Dirname      string
+			TreeChecksum []uint8
+			MetaChecksum []uint8
+		}
+	}
+
+	mayPanic := func() {
+		result := dirtree{}
+		err = UnmarshalBigEndian(data, &result)
 		assert.Nil(t, err, "Unmarshal error")
 	}
 
