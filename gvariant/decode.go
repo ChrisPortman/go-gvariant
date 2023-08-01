@@ -262,6 +262,10 @@ func (d *decodeState) decodeStruct() error {
 	frameBoundsConsumed := 0
 
 	for i := 0; i < fieldCount; i++ {
+		if !val.Type().Field(i).IsExported() {
+			continue
+		}
+
 		field := val.Field(i)
 
 		// TODO: pointer values represent maybe types in the gvariant spec.

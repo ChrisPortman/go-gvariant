@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -162,13 +163,14 @@ func TestArrayStrings(t *testing.T) {
 
 func TestStruct(t *testing.T) {
 	type testStruct struct {
-		Field1 string
-		Field2 int32
+		Field1     string
+		Field2     int32
+		unexported string
 	}
 
 	data := []byte{0x66, 0x6F, 0x6F, 0x00, 0xff, 0xff, 0xff, 0xff, 0x04}
-	expected := testStruct{"foo", -1}
-	result := testStruct{}
+	expected := testStruct{"foo", -1, "unexported"}
+	result := testStruct{unexported: "unexported"}
 	err := Unmarshal(data, &result)
 	assert.Nil(t, err, "Unmarshal error")
 	assert.Equal(t, expected, result)
@@ -302,6 +304,7 @@ func TestOSTreeCommit(t *testing.T) {
 		result := commit{}
 		err = UnmarshalBigEndian(data, &result)
 		assert.Nil(t, err, "Unmarshal error")
+		t.Log(pretty.Sprint(result))
 	}
 
 	assert.NotPanics(t, mayPanic)
@@ -335,6 +338,7 @@ func TestOSTreeDirMeta(t *testing.T) {
 		result := dirmeta{}
 		err = UnmarshalBigEndian(data, &result)
 		assert.Nil(t, err, "Unmarshal error")
+		t.Log(pretty.Sprint(result))
 	}
 
 	assert.NotPanics(t, mayPanic)
@@ -347,7 +351,7 @@ func TestOSTreeDirMeta(t *testing.T) {
 // - a(say) - array of (filename, checksum) for files
 // - a(sayay) - array of (dirname, tree_checksum, meta_checksum) for directories
 func TestOSTreeDirTree(t *testing.T) {
-	data, err:= os.ReadFile("testdata/dirtree.dat")
+	data, err := os.ReadFile("testdata/dirtree.dat")
 	if err != nil {
 		t.Fatalf("could not read test commit data: %s", err)
 	}
@@ -368,6 +372,77 @@ func TestOSTreeDirTree(t *testing.T) {
 		result := dirtree{}
 		err = UnmarshalBigEndian(data, &result)
 		assert.Nil(t, err, "Unmarshal error")
+		t.Log(pretty.Sprint(result))
+	}
+
+	assert.NotPanics(t, mayPanic)
+}
+
+func TestFlatpakSummaryIndex(t *testing.T) {
+	data, err := os.ReadFile("testdata/flatpak_summary_index.dat")
+	if err != nil {
+		t.Fatalf("could not read test data: %s", err)
+	}
+
+	type flatpakSummaryIdx struct {
+		SubSummaries []map[string]struct {
+			Checksum          []uint8
+			PreviousChecksums [][]uint8
+			Metadata          []map[string]Variant
+		}
+		Metadata []map[string]Variant
+	}
+
+	mayPanic := func() {
+		result := flatpakSummaryIdx{}
+		err = UnmarshalBigEndian(data, &result)
+		assert.Nil(t, err, "Unmarshal error")
+		t.Log(pretty.Sprint(result))
+	}
+
+	assert.NotPanics(t, mayPanic)
+}
+
+func TestOSTreeSummary(t *testing.T) {
+	data, err := os.ReadFile("testdata/subsummary.dat")
+	if err != nil {
+		t.Fatalf("could not read test data: %s", err)
+	}
+
+	type ostreeSummary struct {
+		Refs []struct {
+			Name     string
+			Metadata struct {
+				Size           uint64
+				LatestCommit   []uint8
+				AdditionalMeta []map[string]Variant
+			}
+		}
+		Metadata []map[string]Variant
+	}
+
+	type deltas []map[string]Variant
+
+	mayPanic := func() {
+		result := ostreeSummary{}
+		err = UnmarshalBigEndian(data, &result)
+		assert.Nil(t, err, "Unmarshal error")
+		for _, ref := range result.Refs {
+			if ref.Name == "app/io.neovim.nvim/x86_64/stable" {
+				t.Log(pretty.Sprint(ref))
+			}
+		}
+		deltas := []map[string]Variant{}
+		for _, kv := range result.Metadata {
+			for k, v := range kv {
+				if k == "ostree.static-deltas" {
+					UnmarshalBigEndian(v.Data, &deltas)
+					break
+				}
+			}
+		}
+
+		t.Log(pretty.Sprint(deltas))
 	}
 
 	assert.NotPanics(t, mayPanic)
