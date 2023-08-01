@@ -248,25 +248,39 @@ func (d *decodeState) decodeArray() error {
 
 func (d *decodeState) decodeStruct() error {
 	val := d.receiver.Elem()
+	valType := val.Type()
 
 	if structIsVariant(val) {
 		return d.decodeVariant()
 	}
 
-	fieldCount := val.NumField()
+	exportedFieldCount := 0
+	for i := 0; i < val.NumField(); i++ {
+		if valType.Field(i).IsExported() {
+			exportedFieldCount++
+		}
+	}
 
 	// iter the fields, if a field type is fixed size, process it with that many bytes.
 	// if its variable width, grap the end from the frame offsets.  If its the last field,
 	// just pass the remaining bytes.
 	offset := 0
 	frameBoundsConsumed := 0
+	currentField := 0
+	nextField := 0
 
-	for i := 0; i < fieldCount; i++ {
-		if !val.Type().Field(i).IsExported() {
+	for {
+		currentField = nextField
+		nextField++
+		if currentField >= exportedFieldCount {
+			break
+		}
+
+		if !val.Type().Field(currentField).IsExported() {
 			continue
 		}
 
-		field := val.Field(i)
+		field := val.Field(currentField)
 
 		// TODO: pointer values represent maybe types in the gvariant spec.
 		// NOTHING values will be represented by a nil pointer assigned, otherwise
@@ -294,7 +308,7 @@ func (d *decodeState) decodeStruct() error {
 		}
 
 		if !isFixedWidth(rv.Elem()) {
-			if i == fieldCount-1 {
+			if currentField == exportedFieldCount-1 {
 				//last field
 				endPosition = len(d.data) - (d.frameOffsetSize * (frameBoundsConsumed))
 				err := newDecodeState(d.data[offset:endPosition], rv, d.bigEndian).decode()
